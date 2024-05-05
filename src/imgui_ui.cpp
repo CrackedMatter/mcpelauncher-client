@@ -5,6 +5,7 @@
 #include <game_window_manager.h>
 #include <mcpelauncher/path_helper.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_opengl3.h>
 #include <build_info.h>
 #include <GLES3/gl3.h>
@@ -13,6 +14,7 @@
 #endif
 #include <string_view>
 #include <log.h>
+#include <chrono>
 
 static double g_Time = 0.0;
 static bool allowGPU = true;
@@ -61,6 +63,7 @@ void ImGuiUIInit(GameWindow* window) {
     io.GetClipboardTextFn = [](void *user_data) -> const char* {
         return Settings::clipboard.data();
     };
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui_ImplOpenGL3_Init("#version 100");
 
@@ -70,6 +73,14 @@ void ImGuiUIInit(GameWindow* window) {
             window->setFullscreenMode(mode);
         }
     }
+
+    // auto && style = ImGui::GetStyle();
+    // style.Colors[ImGuiCol_Border]                = ImVec4(0.31f, 0.31f, 1.00f, 0.00f);
+    // style.Colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    // style.Colors[ImGuiCol_Button] = ImVec4(0x1e / 255.0, 0x1e / 255.0, 0x1e / 255.0, 0xff);
+    // //style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0x1e / 255.0, 0x1e / 255.0, 0x1e / 255.0, 0xff);
+    // style.Colors[ImGuiCol_ButtonActive] = ImVec4(0x30 / 255.0, 0x30 / 255.0, 0x30 / 255.0, 0xff);
+
 }
 
 void ImGuiUIDrawFrame(GameWindow* window) {
@@ -101,15 +112,43 @@ void ImGuiUIDrawFrame(GameWindow* window) {
     ImGui::NewFrame();
     static auto showMenuBar = true;
     static auto menuFocused = false;
-    auto autoShowMenubar = (!window->getFullscreen() || io.MousePos.y == 0 && io.MouseDelta.y < -5 || menuFocused) && !window->getCursorDisabled();
+    auto now = std::chrono::high_resolution_clock::now();
+    static auto mouseOnY0Since = now;
+    bool showMenuBarViaMouse = false;
+    if(io.MousePos.y) {
+        mouseOnY0Since = now;
+    } else {
+        auto secs = std::chrono::duration_cast<std::chrono::milliseconds>(now - mouseOnY0Since).count();
+        showMenuBarViaMouse = secs >= 500;
+    }
+    auto autoShowMenubar = (!window->getFullscreen() || showMenuBarViaMouse || menuFocused) && !window->getCursorDisabled();
     static auto showFilePicker = false;
     static auto show_demo_window = false;
     static auto show_confirm_popup = false;
     static auto show_about = false;
-    if(Settings::enable_menubar && showMenuBar && autoShowMenubar && ImGui::BeginMainMenuBar())
+    auto wantfocusnextframe = io.KeyAlt;
+    if(wantfocusnextframe) {
+        ImGui::SetNextFrameWantCaptureKeyboard(true);
+    }
+    static bool lastwantfocusnextframe = false;
+    if(Settings::enable_menubar && showMenuBar && (autoShowMenubar || wantfocusnextframe) && ImGui::BeginMainMenuBar())
 
     {
         menuFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+        if(wantfocusnextframe) {
+            auto w = ImGui::GetCurrentWindow();
+            if(!lastwantfocusnextframe) {
+                //auto id = w->GetID(0);
+                auto id = ImGui::GetID("File");
+                ImGui::SetFocusID(id, w);
+                //ImGui::SetActiveID(id, w);
+                ImGuiContext& g = *ImGui::GetCurrentContext();
+                g.NavDisableHighlight = false;
+            }
+            //w->Active = true;
+            menuFocused = true;
+        }
+        lastwantfocusnextframe = wantfocusnextframe;
         if(ImGui::BeginMenu("File")) {
 #ifndef NDEBUG
             if(ImGui::MenuItem("Open")) {
@@ -193,6 +232,7 @@ void ImGuiUIDrawFrame(GameWindow* window) {
     } else {
         Settings::menubarsize = 0;
         menuFocused = false;
+        lastwantfocusnextframe = false;
     }
     // Always center this window when appearing
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -239,6 +279,31 @@ void ImGuiUIDrawFrame(GameWindow* window) {
             ImGui::Text("GL Vendor: %s\n", glGetString(0x1F00 /* GL_VENDOR */));
             ImGui::Text("GL Renderer: %s\n", glGetString(0x1F01 /* GL_RENDERER */));
             ImGui::Text("GL Version: %s\n", glGetString(0x1F02 /* GL_VERSION */));
+
+            auto id = ImGui::GetID("Perfectly");
+            bool hovered = id == ImGui::GetHoveredID();
+            bool active = id == ImGui::GetActiveID();
+            ImGui::Text("Hovered: %d\n", hovered);
+            auto&& col3 = [](long long c) {
+                return ImVec4(((c >> 8) & 0xf) / 16.0, ((c >> 4) & 0xf) / 16.0, ((c) & 0xf) / 16.0, 1);
+            };
+            auto&& col6 = [](long long c) {
+                return ImVec4(((c >> 16) & 0xff) / 255.0, ((c >> 8) & 0xff) / 255.0, ((c) & 0xff) / 255.0, 1);
+            };
+            ImGui::PushStyleColor(ImGuiCol_NavHighlight, col6(0x00ff00));
+            ImGui::PushStyleColor(ImGuiCol_Text, col6(0xffffff));
+            ImGui::PushStyleColor(ImGuiCol_Button, col6(0x1e1e1e));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, col3(0x333));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, col6(0x1e1e1e));
+            ImGui::PushStyleColor(ImGuiCol_Border, active ? col3(0x888) : hovered ? col3(0x666) : col3(0x555));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(5, 5));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2);
+            ImGui::Button("Perfectly", ImVec2(0, 40));
+            ImGui::Text("Hovered Post: %d\n", ImGui::IsItemHovered());
+
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(6);
         }
         ImGui::End();
     }
@@ -275,6 +340,104 @@ void ImGuiUIDrawFrame(GameWindow* window) {
             ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
         }
         ImGui::End();
+        
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(1, 1, 1, 1));
+
+        ImGui::SetNextWindowPos(ImVec2(work_pos.x + PAD + 30, work_pos.y + PAD), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetKeyData(ImGuiKey_W)->Down ? 0.70f : 0.35f); // Transparent background
+        ImVec2 size;
+        if (ImGui::Begin("W", nullptr, window_flags))
+        {
+            ImGui::Text("W");
+            size = ImGui::GetWindowSize();
+        }
+        ImGui::End();
+        
+        auto x = work_pos.x + PAD;
+        auto y = work_pos.y + PAD + size.y + PAD;
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetKeyData(ImGuiKey_A)->Down ? 0.70f : 0.35f); // Transparent background
+        if (ImGui::Begin("A", nullptr, window_flags))
+        {
+            ImGui::Text("A");
+            auto pos = ImGui::GetWindowPos();
+            size = ImGui::GetWindowSize();
+            x += PAD + size.x;
+        }
+        ImGui::End();
+
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetKeyData(ImGuiKey_S)->Down ? 0.70f : 0.35f); // Transparent background
+        if (ImGui::Begin("S", nullptr, window_flags))
+        {
+            ImGui::Text("S");
+            auto pos = ImGui::GetWindowPos();
+            auto size = ImGui::GetWindowSize();
+            x += PAD + size.x;
+        }
+        ImGui::End();
+
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetKeyData(ImGuiKey_D)->Down ? 0.70f : 0.35f); // Transparent background
+        if (ImGui::Begin("D", nullptr, window_flags))
+        {
+            ImGui::Text("D");
+            auto pos = ImGui::GetWindowPos();
+            auto size = ImGui::GetWindowSize();
+            x += PAD + size.x;
+        }
+        ImGui::End();
+
+        // ImGui controls
+        static int clickCount = 0;
+        static int rclickCount = 0;
+        clickCount += ImGui::GetMouseClickedCount(ImGuiMouseButton_Left);
+        rclickCount += ImGui::GetMouseClickedCount(ImGuiMouseButton_Right);
+
+        static float cps = 0;
+        static float rcps = 0;
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetMouseClickedCount(ImGuiMouseButton_Left) > 0 ? 0.70f : 0.35f); // Transparent background
+
+        if (ImGui::Begin("LCPS", nullptr, window_flags))
+        {
+            ImGui::Text("LCPS: %.2f", cps);
+            auto size = ImGui::GetWindowSize();
+            x += PAD + size.x;
+        }
+        ImGui::End();
+
+        ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        window_flags |= ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowBgAlpha(ImGui::GetMouseClickedCount(ImGuiMouseButton_Right) > 0 ? 0.70f : 0.35f); // Transparent background
+
+        if (ImGui::Begin("RCPS", nullptr, window_flags))
+        {
+            ImGui::Text("RCPS: %.2f", rcps);
+            auto size = ImGui::GetWindowSize();
+            x += PAD + size.x;
+        }
+        ImGui::End();
+
+
+
+        // Calculate clicks per second
+        static float elapsedTime = 0.0f;
+        elapsedTime += ImGui::GetIO().DeltaTime;
+        if (elapsedTime >= 1.0f) {
+            cps = static_cast<float>(clickCount) / elapsedTime;
+            rcps = static_cast<float>(rclickCount) / elapsedTime;
+            clickCount = 0;
+            rclickCount = 0;
+            elapsedTime = 0.0f;
+        }
+
+        ImGui::PopStyleColor();
     }
 
     // Rendering
