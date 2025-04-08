@@ -161,7 +161,10 @@ void HttpClientRequest::doRequestAsync(FakeJni::JLong sourceCall) {
                 // Detect if https://github.com/microsoft/libHttpClient/commit/bea2069547e6d480342476cf328b651584e2ada5 is compiled into the binary
                 if(NetworkObserver::getDescriptor()->getMethod("(Ljava/lang/String;)V", "Log")) {
                     auto method = getClass().getMethod("(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V", "OnRequestFailed");
-                    method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")), frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")), frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")), false);
+                    method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")),
+                                   frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")),
+                                   frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")),
+                                   ret == CURLE_COULDNT_RESOLVE_PROXY || ret == CURLE_COULDNT_RESOLVE_HOST || ret == CURLE_COULDNT_CONNECT);
                 } else {
                     auto method = getClass().getMethod("(JLjava/lang/String;)V", "OnRequestFailed");
                     method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")));
@@ -171,7 +174,10 @@ void HttpClientRequest::doRequestAsync(FakeJni::JLong sourceCall) {
             FakeJni::LocalFrame frame(*jvm);
             if(NetworkObserver::getDescriptor()->getMethod("(Ljava/lang/String;)V", "Log")) {
                 auto method = getClass().getMethod("(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V", "OnRequestFailed");
-                method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")), frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")), frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")), false);
+                method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")),
+                               frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")),
+                               frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("")),
+                               false);
             } else {
                 auto method = getClass().getMethod("(JLjava/lang/String;)V", "OnRequestFailed");
                 method->invoke(frame.getJniEnv(), this, sourceCall, frame.getJniEnv().createLocalReference(std::make_shared<FakeJni::JString>("Error")));
